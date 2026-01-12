@@ -1,0 +1,12 @@
+# Core dependencies only (minimal build)
+markitdown>=0.1.0
+customtkinter>=5.2.0
+Pillow>=10.0.0
+
+# Document support (required)
+python-docx>=0.8.11
+python-pptx>=0.6.21
+openpyxl>=3.0.0
+
+# PDF image extraction
+PyMuPDF>=1.23.0

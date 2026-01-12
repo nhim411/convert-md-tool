@@ -1,11 +1,19 @@
-# Core dependencies (optimized for minimal build size)
-markitdown[pdf,docx,pptx,xlsx]>=0.1.0
+# Full dependencies (includes AI Vision)
+# Use this for development or if you want AI image description
+
+# Core
+markitdown>=0.1.0
 customtkinter>=5.2.0
 Pillow>=10.0.0
 
-# Image extraction from PDF
+# Document support
+python-docx>=0.8.11
+python-pptx>=0.6.21
+openpyxl>=3.0.0
+
+# PDF image extraction
 PyMuPDF>=1.23.0
 
-# AI Vision (optional - for image description)
+# AI Vision (optional - adds ~50MB to build)
 openai>=1.0.0
 google-generativeai>=0.3.0
