@@ -39,62 +39,62 @@ class FileSelector(ctk.CTkFrame):
 
     def _create_widgets(self):
         """Create and layout widgets."""
-        # Header
-        header = ctk.CTkLabel(
-            self,
-            text=f"📁 {LABELS['select_source']}",
-            font=ctk.CTkFont(size=14, weight="bold")
-        )
-        header.pack(anchor="w", padx=10, pady=(10, 5))
-
-        # Path display frame
-        path_frame = ctk.CTkFrame(self, fg_color="transparent")
-        path_frame.pack(fill="x", padx=10, pady=5)
-
-        # Path entry
-        self._path_entry = ctk.CTkEntry(
-            path_frame,
-            placeholder_text=LABELS['no_selection'],
-            state="readonly",
-            height=36
-        )
-        self._path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-
-        # Browse button
-        self._browse_btn = ctk.CTkButton(
-            path_frame,
-            text=f"📂 {LABELS['browse']}",
-            command=self._browse,
-            width=100,
-            height=36
-        )
-        self._browse_btn.pack(side="right")
-
-        # Mode selection frame
+        # Main layout frame (transparent)
+        # 1. Mode Selection (Top)
         mode_frame = ctk.CTkFrame(self, fg_color="transparent")
-        mode_frame.pack(anchor="w", padx=10, pady=(5, 10))
+        mode_frame.pack(fill="x", padx=0, pady=(0, 10))
 
         self._mode_var = ctk.StringVar(value="folder")
+
+        # Custom styled radio buttons (segmented control style)
+        self._folder_radio = ctk.CTkRadioButton(
+            mode_frame,
+            text=LABELS['folder_mode'],
+            variable=self._mode_var,
+            value="folder",
+            command=self._on_mode_change,
+            # font=ctk.CTkFont(size=13, weight="bold")
+        )
+        self._folder_radio.pack(side="left", padx=(0, 20))
 
         self._file_radio = ctk.CTkRadioButton(
             mode_frame,
             text=LABELS['file_mode'],
             variable=self._mode_var,
             value="file",
-            command=self._on_mode_change
+            command=self._on_mode_change,
+            # font=ctk.CTkFont(size=13, weight="bold")
         )
-        self._file_radio.pack(side="left", padx=(0, 20))
+        self._file_radio.pack(side="left")
 
-        self._folder_radio = ctk.CTkRadioButton(
-            mode_frame,
-            text=LABELS['folder_mode'],
-            variable=self._mode_var,
-            value="folder",
-            command=self._on_mode_change
+        # 2. Hero Input Area (Big Browse Button + Entry)
+        input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        input_frame.pack(fill="x")
+
+        # Path Input (Center) - Taller and bigger font
+        self._path_entry = ctk.CTkEntry(
+            input_frame,
+            placeholder_text=LABELS['placeholder_select'],
+            state="readonly",
+            height=50,
+            font=ctk.CTkFont(size=14)
         )
-        self._folder_radio.pack(side="left")
+        self._path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
-    def _browse(self):
+        # Browse Button (Right) - Large
+        self._browse_btn = ctk.CTkButton(
+            input_frame,
+            text=f"📂 {LABELS['browse']}",
+            command=self._browse_action,
+            width=120,
+            height=50,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color=("green", "#2fa572"), # Different color to convert button
+            hover_color=("darkgreen", "#106a43")
+        )
+        self._browse_btn.pack(side="right")
+
+    def _browse_action(self):
         """Open file/folder dialog."""
         if self._mode_var.get() == "file":
             path = filedialog.askopenfilename(

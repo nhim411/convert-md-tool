@@ -24,6 +24,19 @@ class AppConfig:
     depth_all: bool = True
     use_custom_output: bool = False
     custom_output_path: str = ""
+    overwrite_existing: bool = False
+
+    # RAG & AI Options
+    chunk_enabled: bool = False
+    excel_clean_enabled: bool = False
+    extract_images: bool = False
+    describe_images: bool = False
+    summary_enabled: bool = False
+
+    ai_provider: str = "openai"
+    ai_model: str = "gpt-4o-mini"
+    openai_key: str = ""
+    gemini_key: str = ""
 
     # Selected formats
     selected_formats: list = field(default_factory=lambda: [

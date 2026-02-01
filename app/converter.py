@@ -10,6 +10,12 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Set, Callable
 from markitdown import MarkItDown
+from datetime import datetime
+import json
+import text_processor
+import ai_helper
+import chunker
+import excel_cleaner
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,12 +23,19 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ImageOptions:
-    """Options for image handling during conversion."""
+class AIOptions:
+    """Options for AI handling (Image & Text)."""
     extract_images: bool = False
     describe_images: bool = False
-    ai_provider: str = "openai"  # 'openai' or 'gemini'
+
+    # RAG & Summarization
+    chunk_enabled: bool = False
+    excel_clean_enabled: bool = False
+    summary_enabled: bool = False
+
+    ai_provider: str = "openai"
     api_key: Optional[str] = None
+    ai_model: Optional[str] = None
     images_subdir: str = "images"
 
 
@@ -33,6 +46,7 @@ class ConversionResult:
     output_path: Optional[str]
     success: bool
     error_message: Optional[str] = None
+    skipped: bool = False
     images_extracted: int = 0
     images_described: int = 0
 
@@ -60,11 +74,11 @@ class MarkdownConverter:
         """Initialize the converter with markitdown instance."""
         self._md = MarkItDown(enable_plugins=False)
         self._stop_requested = False
-        self._image_options = ImageOptions()
+        self._ai_options = AIOptions()
 
-    def set_image_options(self, options: ImageOptions):
-        """Set image handling options."""
-        self._image_options = options
+    def set_ai_options(self, options: AIOptions):
+        """Set AI handling options."""
+        self._ai_options = options
 
     @classmethod
     def get_all_extensions(cls) -> Set[str]:
@@ -126,11 +140,27 @@ class MarkdownConverter:
         ImageExtractor.save_images(images, str(images_dir), base_name)
 
         # Describe images with AI if enabled
-        if self._image_options.describe_images and self._image_options.api_key:
+        if self._ai_options.describe_images and self._ai_options.api_key:
             try:
+                describer = ai_helper.AIService( # Use AIService for image description via helper if refactored?
+                    # Wait, AIService currently text only in my impl?
+                    # Let's import ImageDescriber from image_handler for now as before,
+                    # but use the unified options.
+                    # Or better: make AIService handle both.
+                    # For now keep using image_handler.AIImageDescriber but pass new options.
+                    provider=self._ai_options.ai_provider,
+                    api_key=self._ai_options.api_key,
+                    model=self._ai_options.ai_model
+                )
+                # Note: I need to update image_handler.AIImageDescriber init to accept model properly if changed
+                # It accepts (provider, api_key, model) so it's fine.
+
+                # Actually I should use the class directly
+                from image_handler import AIImageDescriber
                 describer = AIImageDescriber(
-                    provider=self._image_options.ai_provider,
-                    api_key=self._image_options.api_key
+                    provider=self._ai_options.ai_provider,
+                    api_key=self._ai_options.api_key,
+                    model=self._ai_options.ai_model
                 )
                 images = describer.describe_images(images)
                 images_described = sum(1 for img in images if img.description)
@@ -150,7 +180,8 @@ class MarkdownConverter:
     def convert_file(
         self,
         source_path: str,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        overwrite: bool = False
     ) -> ConversionResult:
         """
         Convert a single file to Markdown.
@@ -158,6 +189,7 @@ class MarkdownConverter:
         Args:
             source_path: Path to the source file
             output_dir: Optional output directory. If None, outputs to same directory as source.
+            overwrite: If True, overwrite existing .md files. If False, skip.
 
         Returns:
             ConversionResult with success status and output path
@@ -187,31 +219,109 @@ class MarkdownConverter:
         else:
             output_base = source.parent
 
-        output_path = output_base / f"{source.stem}.md"
+        output_path = output_base / f"{source.name}.md"
+
+        # Check if file exists and skip if not overwriting
+        if output_path.exists() and not overwrite:
+            return ConversionResult(
+                source_path=source_path,
+                output_path=str(output_path),
+                success=True,
+                skipped=True,
+                error_message="File đã tồn tại, bỏ qua"
+            )
 
         try:
             # Ensure output directory exists
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Convert using markitdown
-            result = self._md.convert(str(source))
-            markdown_content = result.text_content
+            # Excel Cleaning (Option A)
+            actual_source = source
+            temp_cleaned_file = None
+            if self._ai_options.excel_clean_enabled and source.suffix.lower() in ['.xlsx', '.xls']:
+                try:
+                    cleaned = excel_cleaner.clean_excel_file(str(source))
+                    if cleaned:
+                        temp_cleaned_file = cleaned
+                        actual_source = Path(cleaned)
+                except Exception as e:
+                    logger.warning(f"Excel cleaning failed, using original: {e}")
+
+            try:
+                # Convert using markitdown
+                result = self._md.convert(str(actual_source))
+                markdown_content = result.text_content
+            finally:
+                # Cleanup temp file
+                if temp_cleaned_file and os.path.exists(temp_cleaned_file):
+                    try:
+                        os.remove(temp_cleaned_file)
+                    except OSError:
+                        pass
 
             # Process images if enabled
             images_extracted = 0
             images_described = 0
 
-            if self._image_options.extract_images:
+            # Process images if enabled
+            images_extracted = 0
+            images_described = 0
+
+            if self._ai_options.extract_images:
                 try:
                     images_md, images_extracted, images_described = self._process_images(
                         str(source),
                         output_base,
-                        source.stem
+                        source.name
                     )
                     if images_md:
                         markdown_content += images_md
                 except Exception as e:
                     logger.warning(f"Image processing failed: {e}")
+
+            # Optimize for Japanese RAG
+            try:
+                # Clean text (remove spaces between JP chars)
+                markdown_content = text_processor.clean_japanese_text(markdown_content)
+                markdown_content = text_processor.normalize_width(markdown_content)
+
+                # AI Enrichment (Summary & Keywords)
+                ai_frontmatter = ""
+                if self._ai_options.summary_enabled and self._ai_options.api_key:
+                    try:
+                        ai_service = ai_helper.AIService(
+                            provider=self._ai_options.ai_provider,
+                            api_key=self._ai_options.api_key,
+                            model=self._ai_options.ai_model
+                        )
+                        summary_yaml = ai_service.summarize_text(markdown_content)
+                        if summary_yaml:
+                            ai_frontmatter = summary_yaml + "\n"
+                    except Exception as e:
+                        logger.warning(f"AI Summary failed: {e}")
+
+                # Add RAG Metadata (Frontmatter)
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                frontmatter = f"---\nsource_file: {source.name}\nconverted_at: {timestamp}\n{ai_frontmatter}---\n\n"
+                markdown_content = frontmatter + markdown_content
+
+                # RAG Chunking
+                if self._ai_options.chunk_enabled:
+                    try:
+                        rag_chunker = chunker.MarkdownChunker()
+                        chunks = rag_chunker.chunk_text(markdown_content, source.name)
+
+                        # Save .jsonl
+                        jsonl_path = output_path.with_suffix('.jsonl')
+                        with open(jsonl_path, 'w', encoding='utf-8') as f:
+                            for chunk in chunks:
+                                f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+                        logger.info(f"Created RAG chunks: {jsonl_path}")
+                    except Exception as e:
+                        logger.warning(f"Chunking failed: {e}")
+
+            except Exception as e:
+                logger.warning(f"Text optimization failed: {e}")
 
             # Write output
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -299,6 +409,7 @@ class MarkdownConverter:
         max_depth: Optional[int] = None,
         allowed_formats: Optional[List[str]] = None,
         output_dir: Optional[str] = None,
+        overwrite: bool = False,
         progress_callback: Optional[Callable[[int, int, ConversionResult], None]] = None
     ) -> List[ConversionResult]:
         """
@@ -310,6 +421,7 @@ class MarkdownConverter:
             max_depth: Maximum depth for recursive conversion
             allowed_formats: List of format category names to include
             output_dir: Optional output directory
+            overwrite: If True, overwrite existing .md files. If False, skip.
             progress_callback: Optional callback(current, total, result) for progress updates
 
         Returns:
@@ -341,7 +453,7 @@ class MarkdownConverter:
             if self._stop_requested:
                 break
 
-            result = self.convert_file(file_path, output_dir)
+            result = self.convert_file(file_path, output_dir, overwrite=overwrite)
             results.append(result)
 
             if progress_callback:

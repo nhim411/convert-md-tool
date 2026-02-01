@@ -12,48 +12,85 @@
 - 📁 Chuyển đổi file đơn hoặc cả thư mục
 - 🔄 Hỗ trợ chuyển đổi thư mục con (recursive)
 - 🎯 Lọc định dạng file cần chuyển đổi
-- 📤 Xuất ra vị trí tùy chỉnh
+- 📤 Xuất ra vị trí tùy chỉnh hoặc tại chỗ
+- ⚠️ **Mới:** Tùy chọn giữ nguyên hoặc ghi đè file cũ
 - 🌙 Dark/Light theme
 - 🇻🇳 Giao diện tiếng Việt
 
-## 📥 Cài đặt
+## � Yêu cầu Hệ thống
 
-### Tải bản build sẵn
+Để chạy từ mã nguồn hoặc đóng gói ứng dụng, bạn cần:
 
-Tải file cài đặt từ [Releases](../../releases):
-- **Windows**: `MarkdownConverter-windows.zip`
-- **macOS**: `MarkdownConverter-macos.zip`
+- **Python**: Phiên bản **3.10** đến **3.12** (Khuyên dùng 3.11 để tương thích tốt nhất)
+- **Hệ điều hành**: Windows 10/11 hoặc macOS 10.15+
 
-### Chạy từ source
+## �📥 Cài đặt & Chạy từ Source
 
+### 1. Chuẩn bị môi trường
+
+Đảm bảo bạn đã cài đặt Python và Git. Kiểm tra bằng dòng lệnh:
 ```bash
-# Clone repository
+python --version  # Nên là Python 3.10+
+git --version
+```
+
+### 2. Clone và Cài đặt
+
+#### Windows
+```cmd
 git clone https://github.com/yourusername/markdown-converter.git
 cd markdown-converter
 
-# Tạo virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Tạo môi trường ảo
+python -m venv venv
+venv\Scripts\activate
 
-# Cài đặt dependencies
+# Cài đặt thư viện
 pip install -r app/requirements.txt
 
 # Chạy ứng dụng
 python app/main.py
 ```
 
-## 🔨 Build
+#### macOS
+```bash
+git clone https://github.com/yourusername/markdown-converter.git
+cd markdown-converter
 
-### macOS
+# Tạo môi trường ảo
+python3 -m venv venv
+source venv/bin/activate
+
+# Cài đặt thư viện
+pip install -r app/requirements.txt
+
+# Chạy ứng dụng
+python app/main.py
+```
+
+## hammer_and_wrench: Đóng gói (Build EXE/App)
+
+### Windows (Tạo file .exe)
+
+Dự án đã bao gồm script tự động build cho Windows.
+
+1. Mở Command Prompt (cmd) hoặc PowerShell tại thư mục dự án.
+2. Đảm bảo đã activate venv (`venv\Scripts\activate`).
+3. Chạy lệnh:
+```cmd
+build_windows.bat
+```
+4. Sau khi hoàn tất, file chạy sẽ nằm tại: `dist\MarkdownConverter\MarkdownConverter.exe`
+
+> **Lưu ý:** Script sẽ tự động cài đặt `pyinstaller` và thực hiện các bước tối ưu dung lượng.
+
+### macOS (Tạo file .app)
+
 ```bash
 chmod +x build_mac.sh
 ./build_mac.sh
 ```
-
-### Windows
-```cmd
-build_windows.bat
-```
+File ứng dụng sẽ nằm trong thư mục `dist/`.
 
 ## 📖 Tài liệu
 

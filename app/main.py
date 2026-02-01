@@ -16,7 +16,7 @@ import customtkinter as ctk
 from typing import Optional, List
 
 from locales import LABELS
-from converter import MarkdownConverter, ConversionResult, ImageOptions as ImageOptionsData
+from converter import MarkdownConverter, ConversionResult, AIOptions as ConverterAIOptions
 from config_manager import ConfigManager, AppConfig
 from components import (
     FileSelector,
@@ -24,7 +24,9 @@ from components import (
     OutputOptions,
     FormatFilter,
     ProgressPanel,
-    ImageOptions,
+    FormatFilter,
+    ProgressPanel,
+    AIOptions,
     FilePreview,
     CollapsibleFrame,
 )
@@ -64,18 +66,18 @@ class MarkdownConverterApp(ctk.CTk):
 
     def _create_widgets(self):
         """Create and layout all widgets."""
-        # Main container with padding
+        # Main container with padding (No scroll here, we use tabs)
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=15, pady=15)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Header
+        # 1. Header Area (Fixed)
         header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         header_frame.pack(fill="x", pady=(0, 10))
 
         title_label = ctk.CTkLabel(
             header_frame,
             text=f"🔄 {LABELS['app_title']}",
-            font=ctk.CTkFont(size=20, weight="bold")
+            font=ctk.CTkFont(size=24, weight="bold")
         )
         title_label.pack(side="left")
 
@@ -88,88 +90,123 @@ class MarkdownConverterApp(ctk.CTk):
             height=40,
             command=self._toggle_theme,
             fg_color="transparent",
-            border_width=1
+            border_width=1,
+            hover_color=("gray85", "gray25")
         )
         self._theme_btn.pack(side="right")
 
-        # Scrollable content frame
-        content_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
-        content_frame.pack(fill="both", expand=True)
+        self._theme_btn.pack(side="right")
 
-        # File Selector
+        # 2. Scrollable Content Area (Hero + Tabs)
+        self._scroll_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+        self._scroll_frame.pack(fill="both", expand=True, pady=(0, 10))
+
+        # Hero Section inside Scrollable Frame
+        hero_frame = ctk.CTkFrame(self._scroll_frame, fg_color=("gray95", "gray15"), corner_radius=10)
+        hero_frame.pack(fill="x", pady=(0, 20), ipady=10)
+
         self._file_selector = FileSelector(
-            content_frame,
+            hero_frame,
             on_selection_change=self._on_source_change
         )
-        self._file_selector.pack(fill="x", pady=(0, 5))
+        self._file_selector.pack(fill="x", padx=15, pady=10)
 
-        # Format Filter (expanded, with note about processed formats)
-        self._format_collapse = CollapsibleFrame(
-            content_frame,
-            title="Định dạng tệp",
-            icon="📑",
-            expanded=True
+        # File Preview sits inside hero section when active
+        self._file_preview = FilePreview(
+            hero_frame,
+            on_change=self._on_file_preview_change
         )
-        self._format_collapse.pack(fill="x", pady=(0, 5))
+        # Initially hidden
 
+        # 3. Settings Tabs (Inside Scrollable Frame)
+        self._tab_view = ctk.CTkTabview(self._scroll_frame, height=250)
+        self._tab_view.pack(fill="x", expand=False, pady=(0, 20))
+
+        # Create Tabs
+        tab_general = self._tab_view.add(LABELS.get('tab_general', "Cấu hình"))
+        tab_formats = self._tab_view.add(LABELS.get('tab_formats', "Định dạng"))
+        tab_advanced = self._tab_view.add(LABELS.get('tab_advanced', "Nâng cao & AI"))
+
+        # --- Tab 1: General (Output & Folder Options) ---
+        # Output Options
+        self._output_options = OutputOptions(tab_general, fg_color="transparent")
+        self._output_options.pack(fill="x", pady=5)
+
+        # Folder Options (Initially hidden or shown based on mode, but parented here)
+        self._folder_options = FolderOptions(
+            tab_general,
+            fg_color="transparent",
+            on_change=self._on_folder_options_change
+        )
+        # Logic to visually show/hide will be in _on_source_change, but we pack it inside tab_general
+        # We pack it by default, visibility managed later.
+        self._folder_options.pack(fill="x", pady=5)
+
+
+        # --- Tab 2: Formats ---
+        # --- Tab 2: Formats ---
         # Note about formats
         format_note = ctk.CTkLabel(
-            self._format_collapse.content,
+            tab_formats,
             text="ℹ️ Chọn các định dạng tệp sẽ được chuyển đổi sang Markdown",
             font=ctk.CTkFont(size=11),
             text_color="gray"
         )
-        format_note.pack(anchor="w", padx=10, pady=(5, 0))
+        format_note.pack(anchor="w", padx=10, pady=(10, 5))
 
-        self._format_filter = FormatFilter(self._format_collapse.content)
-        self._format_filter.pack(fill="x")
-
-        # File Preview (for file mode) - shown after format filter
-        self._file_preview = FilePreview(
-            content_frame,
-            on_change=self._on_file_preview_change
+        self._format_filter = FormatFilter(
+            tab_formats,
+            on_change=self._on_format_change
         )
-        # Hidden by default, shown when files selected
+        self._format_filter.pack(fill="x", padx=5)
 
-        # Folder Options (hidden by default, shown in folder mode)
-        self._folder_options = FolderOptions(content_frame)
-        # Will be shown only in folder mode
 
-        # Output Options with note
-        self._output_options = OutputOptions(content_frame)
-        self._output_options.pack(fill="x", pady=(0, 5))
+        # --- Tab 3: Advanced (Image & AI) ---
+        # --- Tab 3: Advanced (Image & AI) ---
+        self._ai_options = AIOptions(tab_advanced, fg_color="transparent")
+        self._ai_options.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Image Options (collapsed by default)
-        self._image_collapse = CollapsibleFrame(
-            content_frame,
-            title="Tùy chọn hình ảnh",
-            icon="🖼️",
-            expanded=False
-        )
-        self._image_collapse.pack(fill="x", pady=(0, 5))
-        self._image_options = ImageOptions(self._image_collapse.content)
-        self._image_options.pack(fill="x")
 
-        # Convert Button
+        # 4. Footer Area (Fixed at bottom)
+        footer_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        footer_frame.pack(fill="x", side="bottom")
+
+        # Progress Panel
+        self._progress_panel = ProgressPanel(footer_frame, height=150)
+        self._progress_panel.pack(fill="x", pady=(10, 0))
+
+        # Action Button (Above Progress Panel)
         self._convert_btn = ctk.CTkButton(
-            content_frame,
+            footer_frame,
+            text=f"🚀 {LABELS['start_convert']}",
+            command=self._start_conversion,
+            height=50,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            fg_color=("blue", "#1f538d"), # slightly darker blue default
+        )
+        self._convert_btn.pack(fill="x", pady=(10, 0), side="bottom") # Pack at bottom of footer (above progress panel? No, usually progress is very bottom or button is very bottom. Let's stack Button then Progress.)
+        # Wait, if pack side="bottom", first packed is bottom-most if sticking to same side.
+        # Let's use simple pack default (top-down) inside footer.
+
+        # Correct Order: Button then Progress Panel
+        # But Action Area in snippet was: Button (20 padding) then Progress.
+        # Let's Repack properly inside Footer
+
+        # Reset footer
+        for widget in footer_frame.winfo_children(): widget.destroy()
+
+        self._convert_btn = ctk.CTkButton(
+            footer_frame,
             text=f"🚀 {LABELS['start_convert']}",
             command=self._start_conversion,
             height=45,
-            font=ctk.CTkFont(size=14, weight="bold")
+            font=ctk.CTkFont(size=16, weight="bold"),
+            fg_color=("blue", "#1f538d"),
         )
         self._convert_btn.pack(fill="x", pady=(5, 5))
 
-        # Progress Panel in collapsible frame
-        self._progress_collapse = CollapsibleFrame(
-            content_frame,
-            title="Kết quả",
-            icon="📊",
-            expanded=True
-        )
-        self._progress_collapse.pack(fill="both", expand=True, pady=(0, 5))
-        self._progress_panel = ProgressPanel(self._progress_collapse.content)
-        self._progress_panel.pack(fill="both", expand=True)
+        self._progress_panel = ProgressPanel(footer_frame, height=120)
+        self._progress_panel.pack(fill="x")
 
     def _bind_events(self):
         """Bind event handlers."""
@@ -181,13 +218,19 @@ class MarkdownConverterApp(ctk.CTk):
         if self._config.include_subfolders:
             self._folder_options._recursive_var.set(True)
 
-        # Image options
-        self._image_options.load_config({
+        # Output options
+        self._output_options.set_overwrite_existing(self._config.overwrite_existing)
+
+        # AI options
+        self._ai_options.load_config({
             "extract_images": self._config.extract_images,
             "describe_images": self._config.describe_images,
+            "chunk_enabled": self._config.chunk_enabled,
+            "excel_clean_enabled": self._config.excel_clean_enabled,
+            "summary_enabled": self._config.summary_enabled,
             "ai_provider": self._config.ai_provider,
-            "openai_api_key": self._config.openai_api_key,
-            "gemini_api_key": self._config.gemini_api_key,
+            "openai_key": self._config.openai_api_key,
+            "gemini_key": self._config.gemini_api_key,
             "ai_model": self._config.openai_model if self._config.ai_provider == "openai" else self._config.gemini_model,
         })
 
@@ -199,18 +242,25 @@ class MarkdownConverterApp(ctk.CTk):
         # Folder options
         self._config.include_subfolders = self._folder_options.is_recursive
 
-        # Image options
-        img_config = self._image_options.get_config()
-        self._config.extract_images = img_config.get("extract_images", False)
-        self._config.describe_images = img_config.get("describe_images", False)
-        self._config.ai_provider = img_config.get("ai_provider", "openai")
-        self._config.openai_api_key = img_config.get("openai_api_key", "")
-        self._config.gemini_api_key = img_config.get("gemini_api_key", "")
+        # Output options
+        self._config.overwrite_existing = self._output_options.overwrite_existing
+
+        # AI options
+        ai_config = self._ai_options.get_config()
+        self._config.extract_images = ai_config.get("extract_images", False)
+        self._config.describe_images = ai_config.get("describe_images", False)
+        self._config.chunk_enabled = ai_config.get("chunk_enabled", False)
+        self._config.excel_clean_enabled = ai_config.get("excel_clean_enabled", False)
+        self._config.summary_enabled = ai_config.get("summary_enabled", False)
+
+        self._config.ai_provider = ai_config.get("ai_provider", "openai")
+        self._config.openai_api_key = ai_config.get("openai_key", "")
+        self._config.gemini_api_key = ai_config.get("gemini_key", "")
 
         if self._config.ai_provider == "openai":
-            self._config.openai_model = img_config.get("ai_model", "gpt-4o-mini")
+            self._config.openai_model = ai_config.get("ai_model", "gpt-4o-mini")
         else:
-            self._config.gemini_model = img_config.get("ai_model", "gemini-1.5-flash")
+            self._config.gemini_model = ai_config.get("ai_model", "gemini-1.5-flash")
 
         self._config_manager.save(self._config)
 
@@ -219,17 +269,67 @@ class MarkdownConverterApp(ctk.CTk):
         # Enable/disable folder options based on mode
         self._folder_options.set_enabled(mode == "folder")
 
-        # Handle file preview for file mode
-        if mode == "file" and path:
-            if os.path.isfile(path):
-                # Single file - show preview
-                self._selected_files = [path]
-                self._file_preview.set_files(self._selected_files)
-                self._file_preview.pack(fill="x", pady=(0, 5), after=self._file_selector)
+        if path:
+            if mode == "file":
+                if os.path.isfile(path):
+                    # Single file - show preview
+                    self._selected_files = [path]
+                    self._file_preview.set_files(self._selected_files)
+                    self._file_preview.pack(fill="x", padx=15, pady=(0, 10), after=self._file_selector)
+            else:
+                # Folder mode - scan and show preview
+                self.after(100, self._scan_folder)  # Small delay to ensure UI ready
+                self._file_preview.pack(fill="x", padx=15, pady=(0, 10), after=self._file_selector)
         else:
-            # Folder mode or no selection - hide preview
+            # No selection - hide preview
             self._file_preview.pack_forget()
             self._selected_files = []
+
+    def _on_format_change(self):
+        """Handle format selection change."""
+        if self._file_selector.is_folder_mode() and self._file_selector.selected_path:
+            self._scan_folder()
+
+    def _on_folder_options_change(self):
+        """Handle folder options change."""
+        if self._file_selector.is_folder_mode() and self._file_selector.selected_path:
+            self._scan_folder()
+
+    def _scan_folder(self):
+        """Scan folder for files and update preview."""
+        path = self._file_selector.selected_path
+        if not path or not os.path.isdir(path):
+            return
+
+        # Show loading state (optional, can be improved)
+        self._progress_panel.set_status("Đang quét thư mục...")
+
+        # Get settings
+        selected_formats = self._format_filter.get_selected_formats()
+        recursive = self._folder_options.is_recursive
+        max_depth = self._folder_options.max_depth
+
+        # Run scan in background to avoid freezing UI
+        def scan_task():
+            files = self._converter.scan_folder(
+                folder_path=path,
+                recursive=recursive,
+                max_depth=max_depth,
+                allowed_extensions=self._converter.get_extensions_for_formats(selected_formats)
+            )
+            # Update UI on main thread
+            self.after(0, lambda: self._update_preview_after_scan(files))
+
+        threading.Thread(target=scan_task, daemon=True).start()
+
+    def _update_preview_after_scan(self, files: List[str]):
+        """Update preview with scanned files."""
+        self._selected_files = files
+        self._file_preview.set_files(files)
+        self._progress_panel.set_status(LABELS['ready'])
+
+        if not files:
+            self._progress_panel.log_message(LABELS['error_empty_folder'], "info")
 
     def _on_file_preview_change(self):
         """Handle file preview selection change."""
@@ -293,14 +393,19 @@ class MarkdownConverterApp(ctk.CTk):
         self._progress_panel.reset()
         self._progress_panel.set_status(LABELS['processing'])
 
-        # Apply image options to converter
-        image_opts = ImageOptionsData(
-            extract_images=self._image_options.extract_images,
-            describe_images=self._image_options.describe_images,
-            ai_provider=self._image_options.ai_provider,
-            api_key=self._image_options.api_key
+        # Apply AI options to converter
+        ai_cfg = self._ai_options.get_config()
+        ai_opts = ConverterAIOptions(
+            extract_images=ai_cfg.get("extract_images", False),
+            describe_images=ai_cfg.get("describe_images", False),
+            chunk_enabled=ai_cfg.get("chunk_enabled", False),
+            excel_clean_enabled=ai_cfg.get("excel_clean_enabled", False),
+            summary_enabled=ai_cfg.get("summary_enabled", False),
+            ai_provider=ai_cfg.get("ai_provider", "openai"),
+            api_key=ai_cfg.get("openai_key") if ai_cfg.get("ai_provider")=="openai" else ai_cfg.get("gemini_key"),
+            ai_model=ai_cfg.get("ai_model")
         )
-        self._converter.set_image_options(image_opts)
+        self._converter.set_ai_options(ai_opts)
 
         # Start conversion in background thread
         self._conversion_thread = threading.Thread(
@@ -316,49 +421,38 @@ class MarkdownConverterApp(ctk.CTk):
             output_dir = self._output_options.output_path
 
             if self._file_selector.is_folder_mode():
-                # Folder conversion
-                selected_formats = self._format_filter.get_selected_formats()
-                recursive = self._folder_options.is_recursive
-                max_depth = self._folder_options.max_depth
+                # Folder conversion - Use files from preview!
+                # We already scanned, so we trust the preview list.
+                files_to_convert = self._file_preview.get_selected_files()
 
-                results = self._converter.convert_folder(
-                    folder_path=source_path,
-                    recursive=recursive,
-                    max_depth=max_depth,
-                    allowed_formats=selected_formats,
-                    output_dir=output_dir,
-                    progress_callback=self._on_progress
-                )
-
-                if not results:
-                    self.after(0, lambda: self._progress_panel.log_message(
-                        LABELS['error_empty_folder'], "info"
-                    ))
-
-                # Show completion
-                success_count = sum(1 for r in results if r.success)
-                self.after(0, lambda: self._progress_panel.show_done(
-                    success_count, len(results)
-                ))
+                # Check directly, if list empty logic below handles it
             else:
                 # File mode - convert selected files
                 files_to_convert = self._file_preview.get_selected_files() if self._file_preview.has_files() else [source_path]
-                total = len(files_to_convert)
 
-                self.after(0, lambda: self._progress_panel.set_progress(0, total))
+            if not files_to_convert:
+                 self.after(0, lambda: self._progress_panel.log_message(
+                    LABELS['error_empty_folder'], "info"
+                ))
+                 return
 
-                success_count = 0
-                for i, file_path in enumerate(files_to_convert):
-                    if self._converter._stop_requested:
-                        break
+            total = len(files_to_convert)
+            overwrite = self._output_options.overwrite_existing
 
-                    result = self._converter.convert_file(file_path, output_dir)
-                    if result.success:
-                        success_count += 1
+            self.after(0, lambda: self._progress_panel.set_progress(0, total))
 
-                    self.after(0, lambda r=result, c=i+1, t=total: self._on_progress(c, t, r))
+            success_count = 0
+            for i, file_path in enumerate(files_to_convert):
+                if self._converter._stop_requested:
+                    break
 
-                self.after(0, lambda: self._progress_panel.show_done(success_count, total))
+                result = self._converter.convert_file(file_path, output_dir, overwrite=overwrite)
+                if result.success:
+                    success_count += 1
+
+                self.after(0, lambda r=result, c=i+1, t=total: self._on_progress(c, t, r))
+
+            self.after(0, lambda: self._progress_panel.show_done(success_count, total))
 
         except Exception as e:
             self.after(0, lambda: self._progress_panel.log_message(
@@ -381,6 +475,7 @@ class MarkdownConverterApp(ctk.CTk):
                 output=result.output_path,
                 success=result.success,
                 error=result.error_message,
+                skipped=result.skipped,
                 images_extracted=result.images_extracted,
                 images_described=result.images_described
             )

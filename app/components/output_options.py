@@ -13,7 +13,7 @@ from locales import LABELS
 class OutputOptions(ctk.CTkFrame):
     """
     Component for output configuration.
-    Allows selecting a custom output directory.
+    Allows selecting a custom output directory and overwrite options.
     """
 
     def __init__(
@@ -66,7 +66,7 @@ class OutputOptions(ctk.CTkFrame):
 
         # Path selection frame
         path_frame = ctk.CTkFrame(self, fg_color="transparent")
-        path_frame.pack(fill="x", padx=10, pady=(5, 10))
+        path_frame.pack(fill="x", padx=10, pady=(5, 5))
 
         # Path entry
         self._path_entry = ctk.CTkEntry(
@@ -87,6 +87,16 @@ class OutputOptions(ctk.CTkFrame):
             state="disabled"
         )
         self._browse_btn.pack(side="right")
+
+        # Overwrite existing checkbox
+        self._overwrite_var = ctk.BooleanVar(value=False)
+        self._overwrite_cb = ctk.CTkCheckBox(
+            self,
+            text=LABELS.get('overwrite_existing', 'Ghi đè file MD đã tồn tại'),
+            variable=self._overwrite_var,
+            command=self._notify_change
+        )
+        self._overwrite_cb.pack(anchor="w", padx=10, pady=(5, 10))
 
     def _on_custom_toggle(self):
         """Handle custom output checkbox toggle."""
@@ -137,3 +147,13 @@ class OutputOptions(ctk.CTkFrame):
         if self._custom_output_var.get() and self._output_path:
             return self._output_path
         return None
+
+    @property
+    def overwrite_existing(self) -> bool:
+        """Check if overwrite is enabled."""
+        return self._overwrite_var.get()
+
+    def set_overwrite_existing(self, value: bool):
+        """Set overwrite checkbox state."""
+        self._overwrite_var.set(value)
+

@@ -5,7 +5,7 @@ from .folder_options import FolderOptions
 from .output_options import OutputOptions
 from .format_filter import FormatFilter
 from .progress_panel import ProgressPanel
-from .image_options import ImageOptions
+from .ai_options import AIOptions
 from .file_preview import FilePreview
 from .collapsible_frame import CollapsibleFrame
 
@@ -15,7 +15,7 @@ __all__ = [
     'OutputOptions',
     'FormatFilter',
     'ProgressPanel',
-    'ImageOptions',
+    'AIOptions',
     'FilePreview',
     'CollapsibleFrame',
 ]

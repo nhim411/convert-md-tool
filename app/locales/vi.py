@@ -10,6 +10,7 @@ LABELS = {
     'folder_mode': 'Thư mục',
     'browse': 'Duyệt...',
     'no_selection': 'Chưa chọn tệp hoặc thư mục',
+    'placeholder_select': 'Nhấn nút Duyệt để chọn tài liệu...',
 
     # Folder Options
     'folder_options': 'Tùy chọn Thư mục',
@@ -22,6 +23,12 @@ LABELS = {
     'output_settings': 'Cài đặt Đầu ra',
     'export_different': 'Xuất ra vị trí khác',
     'output_placeholder': 'Chọn thư mục đầu ra...',
+    'overwrite_existing': 'Ghi đè file MD đã tồn tại',
+
+    # Tabs
+    'tab_general': '⚙️ Cấu hình',
+    'tab_formats': '📑 Định dạng',
+    'tab_advanced': '🖼️ Nâng cao & AI',
 
     # Format Filter
     'file_formats': 'Định dạng Tệp',
@@ -65,6 +72,7 @@ LABELS = {
     'success': 'Thành công',
     'failed': 'Thất bại',
     'skipped': 'Bỏ qua',
+    'file_skipped': 'Bỏ qua (đã tồn tại)',
 
     # Image Options
     'image_options': 'Tùy chọn Hình ảnh',
@@ -75,3 +83,4 @@ LABELS = {
     'images_extracted': 'Đã trích xuất {count} hình ảnh',
     'images_described': 'Đã mô tả {count} hình ảnh bằng AI',
 }
+

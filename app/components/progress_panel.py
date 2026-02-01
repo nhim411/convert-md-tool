@@ -118,6 +118,7 @@ class ProgressPanel(ctk.CTkFrame):
         output: Optional[str],
         success: bool,
         error: Optional[str] = None,
+        skipped: bool = False,
         images_extracted: int = 0,
         images_described: int = 0
     ):
@@ -129,6 +130,7 @@ class ProgressPanel(ctk.CTkFrame):
             output: Output file path (if successful)
             success: Whether conversion succeeded
             error: Error message if failed
+            skipped: Whether the file was skipped (already exists)
             images_extracted: Number of images extracted
             images_described: Number of images described by AI
         """
@@ -139,7 +141,48 @@ class ProgressPanel(ctk.CTkFrame):
         source_name = os.path.basename(source)
         timestamp = datetime.now().strftime("%H:%M:%S")
 
-        if success and output:
+        if skipped and output:
+            # Skipped file - yellow/orange styling
+            output_name = os.path.basename(output)
+
+            # Status icon - skip symbol
+            icon_label = ctk.CTkLabel(row, text="⏭️", width=20)
+            icon_label.pack(side="left")
+
+            # Time
+            time_label = ctk.CTkLabel(
+                row, text=f"[{timestamp}]",
+                font=ctk.CTkFont(size=10),
+                text_color="gray",
+                width=70
+            )
+            time_label.pack(side="left")
+
+            # Filename with skip message
+            text = f"{source_name} → {LABELS.get('file_skipped', 'Bỏ qua (đã tồn tại)')}"
+            name_label = ctk.CTkLabel(
+                row,
+                text=text,
+                font=ctk.CTkFont(size=11),
+                text_color="orange",
+                anchor="w"
+            )
+            name_label.pack(side="left", fill="x", expand=True)
+
+            # Open existing file button
+            file_btn = ctk.CTkButton(
+                row,
+                text="📄",
+                width=28,
+                height=24,
+                command=lambda p=output: self._open_file(p),
+                fg_color="transparent",
+                border_width=1,
+                text_color=("gray10", "gray90")
+            )
+            file_btn.pack(side="right", padx=2)
+
+        elif success and output:
             output_name = os.path.basename(output)
             self._output_files[source] = output
 
