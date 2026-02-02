@@ -19,7 +19,10 @@ REM Kiểm tra các bản đã cài
 py --list
 
 REM Tạo venv với Python 3.10 cụ thể
-py -3.10 -m venv venv
+py -3.12 -m venv venv
+venv\Scripts\activate
+pip install -r app/requirements.txt
+python app/main.py
 
 REM Hoặc Python 3.11
 py -3.11 -m venv venv

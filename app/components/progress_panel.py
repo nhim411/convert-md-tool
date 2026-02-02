@@ -36,14 +36,14 @@ class ProgressPanel(ctk.CTkFrame):
 
     def _create_widgets(self):
         """Create and layout widgets."""
-        # Header
+        # Header (Now transparent)
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        header_frame.pack(fill="x", padx=10, pady=(10, 5))
+        header_frame.pack(fill="x", padx=10, pady=(5, 0))
 
         header = ctk.CTkLabel(
             header_frame,
             text=f"📊 {LABELS['progress']}",
-            font=ctk.CTkFont(size=14, weight="bold")
+            font=ctk.CTkFont(size=13, weight="bold")
         )
         header.pack(side="left")
 
@@ -52,8 +52,8 @@ class ProgressPanel(ctk.CTkFrame):
             header_frame,
             text=f"🗑️ {LABELS['clear_log']}",
             command=self.clear_log,
-            width=100,
-            height=28,
+            width=80,
+            height=24,
             fg_color="transparent",
             border_width=1,
             text_color=("gray10", "gray90")
@@ -62,7 +62,8 @@ class ProgressPanel(ctk.CTkFrame):
 
         # Progress bar frame
         progress_frame = ctk.CTkFrame(self, fg_color="transparent")
-        progress_frame.pack(fill="x", padx=10, pady=5)
+        progress_frame = ctk.CTkFrame(self, fg_color="transparent")
+        progress_frame.pack(fill="x", padx=10, pady=2)
 
         # Progress bar
         self._progress_bar = ctk.CTkProgressBar(progress_frame, height=20)
@@ -86,9 +87,9 @@ class ProgressPanel(ctk.CTkFrame):
         self._status_label.pack(anchor="w", padx=10, pady=5)
 
         # Results frame with scrollable list
+        # Results frame with scrollable list (EXPANDING)
         self._results_frame = ctk.CTkScrollableFrame(
             self,
-            height=150,
             fg_color=("gray95", "gray17")
         )
         self._results_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))

@@ -44,8 +44,8 @@ class MarkdownConverterApp(ctk.CTk):
 
         # Configure window
         self.title(LABELS['app_title'])
-        self.geometry("750x900")
-        self.minsize(650, 800)
+        self.geometry("1100x700")
+        self.minsize(900, 600)
 
         # Set appearance from config
         ctk.set_appearance_mode(self._config.theme)
@@ -66,18 +66,18 @@ class MarkdownConverterApp(ctk.CTk):
 
     def _create_widgets(self):
         """Create and layout all widgets."""
-        # Main container with padding (No scroll here, we use tabs)
+        # Main container
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # 1. Header Area (Fixed)
+        # 1. Header Area (Full Width)
         header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         header_frame.pack(fill="x", pady=(0, 10))
 
         title_label = ctk.CTkLabel(
             header_frame,
             text=f"🔄 {LABELS['app_title']}",
-            font=ctk.CTkFont(size=24, weight="bold")
+            font=ctk.CTkFont(size=20, weight="bold")
         )
         title_label.pack(side="left")
 
@@ -86,8 +86,8 @@ class MarkdownConverterApp(ctk.CTk):
         self._theme_btn = ctk.CTkButton(
             header_frame,
             text=theme_icon,
-            width=40,
-            height=40,
+            width=32,
+            height=32,
             command=self._toggle_theme,
             fg_color="transparent",
             border_width=1,
@@ -95,57 +95,58 @@ class MarkdownConverterApp(ctk.CTk):
         )
         self._theme_btn.pack(side="right")
 
-        self._theme_btn.pack(side="right")
+        # 2. Content Area (Split Columns)
+        content_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True)
 
-        # 2. Scrollable Content Area (Hero + Tabs)
-        self._scroll_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+        # --- LEFT COLUMN (Inputs & Config) ---
+        # 65% width normally, but with pack side=left expand=True it shares space.
+        # We can use grid or pack. Pack is easier if we want flexible split.
+        left_col = ctk.CTkFrame(content_frame, fg_color="transparent")
+        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        # Scrollable container for Left Column if height is small
+        self._scroll_frame = ctk.CTkScrollableFrame(left_col, fg_color="transparent")
         self._scroll_frame.pack(fill="both", expand=True, pady=(0, 10))
 
-        # Hero Section inside Scrollable Frame
+        # Hero Section (File Selector)
         hero_frame = ctk.CTkFrame(self._scroll_frame, fg_color=("gray95", "gray15"), corner_radius=10)
-        hero_frame.pack(fill="x", pady=(0, 20), ipady=10)
+        hero_frame.pack(fill="x", pady=(0, 10), ipady=5)
 
         self._file_selector = FileSelector(
             hero_frame,
             on_selection_change=self._on_source_change
         )
-        self._file_selector.pack(fill="x", padx=15, pady=10)
+        self._file_selector.pack(fill="x", padx=10, pady=5)
 
-        # File Preview sits inside hero section when active
+        # File Preview (Inside Hero)
         self._file_preview = FilePreview(
             hero_frame,
             on_change=self._on_file_preview_change
         )
         # Initially hidden
 
-        # 3. Settings Tabs (Inside Scrollable Frame)
-        self._tab_view = ctk.CTkTabview(self._scroll_frame, height=250)
-        self._tab_view.pack(fill="x", expand=False, pady=(0, 20))
+        # Settings Tabs
+        self._tab_view = ctk.CTkTabview(self._scroll_frame, height=350)
+        self._tab_view.pack(fill="x", expand=True)
 
         # Create Tabs
         tab_general = self._tab_view.add(LABELS.get('tab_general', "Cấu hình"))
         tab_formats = self._tab_view.add(LABELS.get('tab_formats', "Định dạng"))
         tab_advanced = self._tab_view.add(LABELS.get('tab_advanced', "Nâng cao & AI"))
 
-        # --- Tab 1: General (Output & Folder Options) ---
-        # Output Options
+        # --- Tab 1: General ---
         self._output_options = OutputOptions(tab_general, fg_color="transparent")
         self._output_options.pack(fill="x", pady=5)
 
-        # Folder Options (Initially hidden or shown based on mode, but parented here)
         self._folder_options = FolderOptions(
             tab_general,
             fg_color="transparent",
             on_change=self._on_folder_options_change
         )
-        # Logic to visually show/hide will be in _on_source_change, but we pack it inside tab_general
-        # We pack it by default, visibility managed later.
         self._folder_options.pack(fill="x", pady=5)
 
-
         # --- Tab 2: Formats ---
-        # --- Tab 2: Formats ---
-        # Note about formats
         format_note = ctk.CTkLabel(
             tab_formats,
             text="ℹ️ Chọn các định dạng tệp sẽ được chuyển đổi sang Markdown",
@@ -160,53 +161,30 @@ class MarkdownConverterApp(ctk.CTk):
         )
         self._format_filter.pack(fill="x", padx=5)
 
-
-        # --- Tab 3: Advanced (Image & AI) ---
-        # --- Tab 3: Advanced (Image & AI) ---
+        # --- Tab 3: Advanced ---
         self._ai_options = AIOptions(tab_advanced, fg_color="transparent")
         self._ai_options.pack(fill="both", expand=True, padx=5, pady=5)
 
-
-        # 4. Footer Area (Fixed at bottom)
-        footer_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        footer_frame.pack(fill="x", side="bottom")
-
-        # Progress Panel
-        self._progress_panel = ProgressPanel(footer_frame, height=150)
-        self._progress_panel.pack(fill="x", pady=(10, 0))
-
-        # Action Button (Above Progress Panel)
+        # Action Button (Bottom of Left Column)
         self._convert_btn = ctk.CTkButton(
-            footer_frame,
+            left_col,
             text=f"🚀 {LABELS['start_convert']}",
             command=self._start_conversion,
             height=50,
             font=ctk.CTkFont(size=16, weight="bold"),
-            fg_color=("blue", "#1f538d"), # slightly darker blue default
-        )
-        self._convert_btn.pack(fill="x", pady=(10, 0), side="bottom") # Pack at bottom of footer (above progress panel? No, usually progress is very bottom or button is very bottom. Let's stack Button then Progress.)
-        # Wait, if pack side="bottom", first packed is bottom-most if sticking to same side.
-        # Let's use simple pack default (top-down) inside footer.
-
-        # Correct Order: Button then Progress Panel
-        # But Action Area in snippet was: Button (20 padding) then Progress.
-        # Let's Repack properly inside Footer
-
-        # Reset footer
-        for widget in footer_frame.winfo_children(): widget.destroy()
-
-        self._convert_btn = ctk.CTkButton(
-            footer_frame,
-            text=f"🚀 {LABELS['start_convert']}",
-            command=self._start_conversion,
-            height=45,
-            font=ctk.CTkFont(size=16, weight="bold"),
             fg_color=("blue", "#1f538d"),
         )
-        self._convert_btn.pack(fill="x", pady=(5, 5))
+        self._convert_btn.pack(fill="x", side="bottom", pady=(10, 0))
 
-        self._progress_panel = ProgressPanel(footer_frame, height=120)
-        self._progress_panel.pack(fill="x")
+
+        # --- RIGHT COLUMN (Progress & Logs) ---
+        right_col = ctk.CTkFrame(content_frame, fg_color=("gray90", "gray13"), corner_radius=10)
+        right_col.pack(side="right", fill="both", expand=True, ipadx=5, ipady=5)
+
+        # We pass height=0 or something to imply full fill, but ProgressPanel logic needs update
+        # to expand its internal scroll frame.
+        self._progress_panel = ProgressPanel(right_col)
+        self._progress_panel.pack(fill="both", expand=True, padx=5, pady=5)
 
     def _bind_events(self):
         """Bind event handlers."""

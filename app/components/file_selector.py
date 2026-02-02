@@ -42,7 +42,7 @@ class FileSelector(ctk.CTkFrame):
         # Main layout frame (transparent)
         # 1. Mode Selection (Top)
         mode_frame = ctk.CTkFrame(self, fg_color="transparent")
-        mode_frame.pack(fill="x", padx=0, pady=(0, 10))
+        mode_frame.pack(fill="x", padx=0, pady=(0, 5))
 
         self._mode_var = ctk.StringVar(value="folder")
 
@@ -76,8 +76,8 @@ class FileSelector(ctk.CTkFrame):
             input_frame,
             placeholder_text=LABELS['placeholder_select'],
             state="readonly",
-            height=50,
-            font=ctk.CTkFont(size=14)
+            height=35,
+            font=ctk.CTkFont(size=13)
         )
         self._path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
@@ -86,9 +86,9 @@ class FileSelector(ctk.CTkFrame):
             input_frame,
             text=f"📂 {LABELS['browse']}",
             command=self._browse_action,
-            width=120,
-            height=50,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            width=100,
+            height=35,
+            font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=("green", "#2fa572"), # Different color to convert button
             hover_color=("darkgreen", "#106a43")
         )
