@@ -16,12 +16,25 @@
 │  │FormatFilter │  │        ProgressPanel            │  │
 │  └─────────────┘  └─────────────────────────────────┘  │
 │                                                         │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │              AIOptions Component                    │  │
+│  │  (RAG Chunking, Image Extraction, AI Enrichment)  │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                         │
 ├─────────────────────────────────────────────────────────┤
 │                    converter.py                         │
 │                  (Conversion Engine)                    │
 ├─────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  OCRService  │  │  LLMClient   │  │ RAGPipeline  │  │
+│  │(markitdown-  │  │   (OpenAI-   │  │ (Chunking +  │  │
+│  │    ocr)      │  │  Compatible) │  │  Metadata)   │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
 │                    markitdown                           │
 │                 (Microsoft Library)                     │
+│            + markitdown-ocr plugin                     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -32,6 +45,12 @@ markdown-converter/
 ├── app/
 │   ├── main.py              # Entry point, main window
 │   ├── converter.py         # Core conversion logic
+│   ├── llm_client.py        # OpenAI-compatible LLM client (text + vision)
+│   ├── ocr_service.py       # markitdown-ocr plugin wrapper
+│   ├── rag_pipeline.py      # RAG chunking + metadata generation
+│   ├── text_processor.py    # Japanese text cleaning
+│   ├── excel_cleaner.py     # Excel data cleaning
+│   ├── config_manager.py    # App config persistence
 │   ├── requirements.txt     # Python dependencies
 │   ├── locales/
 │   │   ├── __init__.py
@@ -42,7 +61,8 @@ markdown-converter/
 │       ├── folder_options.py
 │       ├── output_options.py
 │       ├── format_filter.py
-│       └── progress_panel.py
+│       ├── progress_panel.py
+│       └── ai_options.py    # AI/RAG configuration UI
 ├── specs/                   # Documentation
 ├── .github/
 │   └── workflows/          # CI/CD workflows
@@ -62,11 +82,28 @@ markdown-converter/
 - Xử lý conversion workflow
 
 ### converter.py
-- Wrapper cho markitdown library
+- Wrapper cho markitdown + markitdown-ocr library
 - Hỗ trợ single file và batch conversion
 - Folder scanning (recursive/non-recursive)
 - Progress callbacks
 - Error handling
+- Orchestrates: OCRService → LLMClient (AI enrichment) → RAGPipeline
+
+### llm_client.py
+- Unified OpenAI-compatible LLM client
+- Supports any base_url (OpenAI, Azure, Ollama, LM Studio, vLLM, Groq)
+- Methods: summarize(), describe_image(), chat(), fetch_models(), test_connection()
+
+### ocr_service.py
+- markitdown-ocr plugin wrapper
+- Enables LLM Vision OCR for embedded images in PDF/DOCX/PPTX/XLSX
+- Falls back to standard markitdown if OCR fails
+
+### rag_pipeline.py
+- Token-aware markdown chunking with overlap
+- Rich metadata generation (chunk_id, token_count, header_path, prev/next_header)
+- JSONL export for RAG ingestion
+- YAML frontmatter generation
 
 ### components/
 Các UI components độc lập:
@@ -78,6 +115,7 @@ Các UI components độc lập:
 | `OutputOptions` | Cấu hình output directory |
 | `FormatFilter` | Checkbox lọc định dạng file |
 | `ProgressPanel` | Progress bar và log |
+| `AIOptions` | RAG, AI enrichment, OpenAI-compatible config |
 
 ### locales/
 - Chứa các labels cho giao diện

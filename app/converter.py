@@ -1,24 +1,17 @@
 """
 Markdown Converter - Core Conversion Module
 Wraps markitdown library for file conversion with error handling and batch processing.
-Supports image extraction and AI description.
+Supports image extraction via markitdown-ocr and AI enrichment via LLMClient.
 """
 
-import os
-import logging
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Set, Callable
-from markitdown import MarkItDown
-from datetime import datetime
 import json
-import text_processor
-import ai_helper
-import chunker
-import excel_cleaner
+import logging
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Set
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -26,17 +19,15 @@ logger = logging.getLogger(__name__)
 class AIOptions:
     """Options for AI handling (Image & Text)."""
     extract_images: bool = False
-    describe_images: bool = False
-
-    # RAG & Summarization
+    ocr_enabled: bool = False
     chunk_enabled: bool = False
     excel_clean_enabled: bool = False
     summary_enabled: bool = False
 
-    ai_provider: str = "openai"
-    api_key: Optional[str] = None
-    ai_model: Optional[str] = None
-    images_subdir: str = "images"
+    # OpenAI-Compatible Configuration
+    base_url: str = "https://api.openai.com/v1"
+    api_key: str = ""
+    model: str = "gpt-4o-mini"
 
 
 @dataclass
@@ -52,37 +43,31 @@ class ConversionResult:
 
 
 class MarkdownConverter:
-    """
-    Wrapper for markitdown library with batch processing support.
-    """
+    """Wrapper for markitdown + markitdown-ocr with batch processing."""
 
-    # Mapping of format categories to file extensions
-    # Optimized for minimal build size
     SUPPORTED_FORMATS: Dict[str, List[str]] = {
-        'PDF': ['.pdf'],
-        'Word': ['.docx', '.doc'],
-        'PowerPoint': ['.pptx', '.ppt'],
-        'Excel': ['.xlsx', '.xls'],
-        'Images': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'],
-        'Text': ['.csv', '.json', '.xml', '.txt'],
+        "PDF": [".pdf"],
+        "Word": [".docx", ".doc"],
+        "PowerPoint": [".pptx", ".ppt"],
+        "Excel": [".xlsx", ".xls"],
+        "Images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"],
+        "Text": [".csv", ".json", ".xml", ".txt"],
     }
 
-    # Formats that support image extraction
-    IMAGE_EXTRACTABLE_FORMATS = {'.pdf', '.docx', '.doc', '.pptx', '.ppt'}
+    IMAGE_EXTRACTABLE_FORMATS = {".pdf", ".docx", ".doc", ".pptx", ".ppt"}
 
     def __init__(self):
-        """Initialize the converter with markitdown instance."""
-        self._md = MarkItDown(enable_plugins=False)
         self._stop_requested = False
         self._ai_options = AIOptions()
+        self._llm_client = None
+        self._ocr_service = None
+        self._rag_pipeline = None
 
     def set_ai_options(self, options: AIOptions):
-        """Set AI handling options."""
         self._ai_options = options
 
     @classmethod
     def get_all_extensions(cls) -> Set[str]:
-        """Get all supported file extensions."""
         extensions = set()
         for ext_list in cls.SUPPORTED_FORMATS.values():
             extensions.update(ext_list)
@@ -90,7 +75,6 @@ class MarkdownConverter:
 
     @classmethod
     def get_extensions_for_formats(cls, format_names: List[str]) -> Set[str]:
-        """Get file extensions for specified format categories."""
         extensions = set()
         for name in format_names:
             if name in cls.SUPPORTED_FORMATS:
@@ -98,233 +82,205 @@ class MarkdownConverter:
         return extensions
 
     def request_stop(self):
-        """Request to stop ongoing batch conversion."""
         self._stop_requested = True
 
     def reset_stop(self):
-        """Reset stop flag for new conversion."""
         self._stop_requested = False
 
-    def _process_images(
-        self,
-        source_path: str,
-        output_dir: Path,
-        base_name: str
-    ) -> tuple:
-        """
-        Extract and optionally describe images from a document.
+    def _get_llm_client(self):
+        """Lazy-init LLM client."""
+        if not self._ai_options.api_key:
+            return None
+        if self._llm_client is None:
+            from llm_client import LLMClient
+            self._llm_client = LLMClient(
+                base_url=self._ai_options.base_url,
+                api_key=self._ai_options.api_key,
+                model=self._ai_options.model,
+            )
+        return self._llm_client
 
-        Returns:
-            Tuple of (markdown_text, images_extracted, images_described)
-        """
-        from image_handler import (
-            ImageExtractor,
-            AIImageDescriber,
-            format_images_for_markdown
-        )
+    def _get_ocr_service(self):
+        """Lazy-init OCR service via markitdown-ocr."""
+        if not self._ai_options.api_key:
+            return None
+        if self._ocr_service is None:
+            client = self._get_llm_client()
+            if client:
+                from ocr_service import OCRService
+                self._ocr_service = OCRService(client)
+        return self._ocr_service
 
-        ext = Path(source_path).suffix.lower()
-        if ext not in self.IMAGE_EXTRACTABLE_FORMATS:
-            return "", 0, 0
-
-        # Extract images
-        images = ImageExtractor.extract_images(source_path)
-        if not images:
-            return "", 0, 0
-
-        images_extracted = len(images)
-        images_described = 0
-
-        # Save images to per-file folder: {base_name}_images/
-        images_dir = output_dir / f"{base_name}_images"
-        ImageExtractor.save_images(images, str(images_dir), base_name)
-
-        # Describe images with AI if enabled
-        if self._ai_options.describe_images and self._ai_options.api_key:
-            try:
-                describer = ai_helper.AIService( # Use AIService for image description via helper if refactored?
-                    # Wait, AIService currently text only in my impl?
-                    # Let's import ImageDescriber from image_handler for now as before,
-                    # but use the unified options.
-                    # Or better: make AIService handle both.
-                    # For now keep using image_handler.AIImageDescriber but pass new options.
-                    provider=self._ai_options.ai_provider,
-                    api_key=self._ai_options.api_key,
-                    model=self._ai_options.ai_model
-                )
-                # Note: I need to update image_handler.AIImageDescriber init to accept model properly if changed
-                # It accepts (provider, api_key, model) so it's fine.
-
-                # Actually I should use the class directly
-                from image_handler import AIImageDescriber
-                describer = AIImageDescriber(
-                    provider=self._ai_options.ai_provider,
-                    api_key=self._ai_options.api_key,
-                    model=self._ai_options.ai_model
-                )
-                images = describer.describe_images(images)
-                images_described = sum(1 for img in images if img.description)
-            except Exception as e:
-                logger.error(f"Failed to describe images: {e}")
-
-        # Generate markdown for images
-        md_text = format_images_for_markdown(
-            images,
-            str(images_dir),
-            base_name,
-            relative_path=True
-        )
-
-        return md_text, images_extracted, images_described
+    def _get_rag_pipeline(self):
+        """Lazy-init RAG pipeline."""
+        if self._rag_pipeline is None:
+            from rag_pipeline import RAGPipeline
+            self._rag_pipeline = RAGPipeline()
+        return self._rag_pipeline
 
     def convert_file(
         self,
         source_path: str,
         output_dir: Optional[str] = None,
-        overwrite: bool = False
+        overwrite: bool = False,
     ) -> ConversionResult:
-        """
-        Convert a single file to Markdown.
-
-        Args:
-            source_path: Path to the source file
-            output_dir: Optional output directory. If None, outputs to same directory as source.
-            overwrite: If True, overwrite existing .md files. If False, skip.
-
-        Returns:
-            ConversionResult with success status and output path
-        """
+        """Convert a single file to Markdown."""
         source = Path(source_path)
 
-        # Validate source file
         if not source.exists():
-            return ConversionResult(
-                source_path=source_path,
-                output_path=None,
-                success=False,
-                error_message="Không tìm thấy tệp"
-            )
+            return ConversionResult(source_path, None, False, "Không tìm thấy tệp")
 
         if not source.is_file():
-            return ConversionResult(
-                source_path=source_path,
-                output_path=None,
-                success=False,
-                error_message="Đường dẫn không phải là tệp"
-            )
+            return ConversionResult(source_path, None, False, "Đường dẫn không phải là tệp")
 
-        # Determine output path
-        if output_dir:
-            output_base = Path(output_dir)
-        else:
-            output_base = source.parent
-
+        output_base = Path(output_dir) if output_dir else source.parent
         output_path = output_base / f"{source.name}.md"
 
-        # Check if file exists and skip if not overwriting
         if output_path.exists() and not overwrite:
-            return ConversionResult(
-                source_path=source_path,
-                output_path=str(output_path),
-                success=True,
-                skipped=True,
-                error_message="File đã tồn tại, bỏ qua"
-            )
+            return ConversionResult(source_path, str(output_path), True, skipped=True, error_message="File đã tồn tại, bỏ qua")
 
         try:
-            # Ensure output directory exists
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_base.mkdir(parents=True, exist_ok=True)
 
-            # Excel Cleaning (Option A)
+            # Step 1: Excel cleaning
             actual_source = source
             temp_cleaned_file = None
-            if self._ai_options.excel_clean_enabled and source.suffix.lower() in ['.xlsx', '.xls']:
+            if self._ai_options.excel_clean_enabled and source.suffix.lower() in (".xlsx", ".xls"):
                 try:
-                    cleaned = excel_cleaner.clean_excel_file(str(source))
+                    from excel_cleaner import clean_excel_file
+                    cleaned = clean_excel_file(str(source))
                     if cleaned:
                         temp_cleaned_file = cleaned
                         actual_source = Path(cleaned)
                 except Exception as e:
-                    logger.warning(f"Excel cleaning failed, using original: {e}")
+                    logger.warning(f"Excel cleaning failed: {e}")
 
             try:
-                # Convert using markitdown
-                result = self._md.convert(str(actual_source))
-                markdown_content = result.text_content
+                # Step 2: Convert with markitdown-ocr if API key available AND OCR enabled
+                if self._ai_options.api_key and self._ai_options.ocr_enabled:
+                    ocr = self._get_ocr_service()
+                    if ocr:
+                        markdown_content = ocr.convert_with_ocr(str(actual_source))
+                    else:
+                        from markitdown import MarkItDown
+                        md = MarkItDown(enable_plugins=False)
+                        markdown_content = md.convert(str(actual_source), keep_data_uris=True).text_content
+                else:
+                    from markitdown import MarkItDown
+                    md = MarkItDown(enable_plugins=False)
+                    markdown_content = md.convert(str(actual_source), keep_data_uris=True).text_content
             finally:
-                # Cleanup temp file
                 if temp_cleaned_file and os.path.exists(temp_cleaned_file):
                     try:
                         os.remove(temp_cleaned_file)
                     except OSError:
                         pass
 
-            # Process images if enabled
+            # Step 2.5: Image extraction (if enabled)
             images_extracted = 0
-            images_described = 0
-
-            # Process images if enabled
-            images_extracted = 0
-            images_described = 0
-
+            images_dir = None
             if self._ai_options.extract_images:
                 try:
-                    images_md, images_extracted, images_described = self._process_images(
-                        str(source),
-                        output_base,
-                        source.name
-                    )
-                    if images_md:
-                        markdown_content += images_md
+                    images_dir = output_base / f"{source.name}_images"
+                    
+                    import re
+                    import base64
+                    import binascii
+                    
+                    # 1. Process inline base64 images generated by markitdown
+                    pattern = r'!\[([^\]]*)\]\(data:image/([a-zA-Z0-9.+]+);base64,([a-zA-Z0-9+/=]+)\)'
+                    if re.search(pattern, markdown_content):
+                        images_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        def replacer(match):
+                            nonlocal images_extracted
+                            alt_text = match.group(1)
+                            ext = match.group(2)
+                            if ext.lower() == 'jpeg': ext = 'jpg'
+                            b64_data = match.group(3)
+                            
+                            images_extracted += 1
+                            filename = f"image_{images_extracted}.{ext}"
+                            out_path = images_dir / filename
+                            
+                            try:
+                                image_bytes = base64.b64decode(b64_data)
+                                out_path.write_bytes(image_bytes)
+                            except binascii.Error:
+                                pass # Invalid base64
+                                
+                            rel_path = f"{source.name}_images/{filename}"
+                            return f"![{alt_text}]({rel_path})"
+                            
+                        markdown_content = re.sub(pattern, replacer, markdown_content)
+                    
+                    # 2. Process PDF images (pdfminer does not extract images, so we use PyMuPDF and append)
+                    if source.suffix.lower() == ".pdf":
+                        images_dir.mkdir(parents=True, exist_ok=True)
+                        extracted_pdf = self._extract_images(actual_source, images_dir, start_count=images_extracted)
+                        if extracted_pdf > 0:
+                            images_extracted += extracted_pdf
+                            img_refs = "\n\n## Hình ảnh đính kèm (PDF)\n\n"
+                            # Append only the newly extracted PDF images
+                            for img_file in sorted(images_dir.iterdir()):
+                                if getattr(img_file, "is_newly_extracted", True): # We just append all for simplicity
+                                    pass
+                            
+                            # Safely just iterate what's in the folder and append anything not already linked
+                            # Wait, simple approach: just append all from PyMuPDF
+                            # But since PDF doesn't have inline images, all images in images_dir are from PyMuPDF!
+                            img_refs = "\n\n## Hình ảnh đính kèm\n\n"
+                            for img_file in sorted(images_dir.iterdir()):
+                                rel_path = f"{source.name}_images/{img_file.name}"
+                                img_refs += f"![{img_file.stem}]({rel_path})\n\n"
+                            markdown_content += img_refs
+                            
                 except Exception as e:
-                    logger.warning(f"Image processing failed: {e}")
+                    logger.warning(f"Image extraction failed: {e}")
 
-            # Optimize for Japanese RAG
+            # Step 3: Text optimization
             try:
-                # Clean text (remove spaces between JP chars)
-                markdown_content = text_processor.clean_japanese_text(markdown_content)
-                markdown_content = text_processor.normalize_width(markdown_content)
-
-                # AI Enrichment (Summary & Keywords)
-                ai_frontmatter = ""
-                if self._ai_options.summary_enabled and self._ai_options.api_key:
-                    try:
-                        ai_service = ai_helper.AIService(
-                            provider=self._ai_options.ai_provider,
-                            api_key=self._ai_options.api_key,
-                            model=self._ai_options.ai_model
-                        )
-                        summary_yaml = ai_service.summarize_text(markdown_content)
-                        if summary_yaml:
-                            ai_frontmatter = summary_yaml + "\n"
-                    except Exception as e:
-                        logger.warning(f"AI Summary failed: {e}")
-
-                # Add RAG Metadata (Frontmatter)
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                frontmatter = f"---\nsource_file: {source.name}\nconverted_at: {timestamp}\n{ai_frontmatter}---\n\n"
-                markdown_content = frontmatter + markdown_content
-
-                # RAG Chunking
-                if self._ai_options.chunk_enabled:
-                    try:
-                        rag_chunker = chunker.MarkdownChunker()
-                        chunks = rag_chunker.chunk_text(markdown_content, source.name)
-
-                        # Save .jsonl
-                        jsonl_path = output_path.with_suffix('.jsonl')
-                        with open(jsonl_path, 'w', encoding='utf-8') as f:
-                            for chunk in chunks:
-                                f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
-                        logger.info(f"Created RAG chunks: {jsonl_path}")
-                    except Exception as e:
-                        logger.warning(f"Chunking failed: {e}")
-
+                from text_processor import clean_japanese_text, normalize_width
+                markdown_content = clean_japanese_text(markdown_content)
+                markdown_content = normalize_width(markdown_content)
             except Exception as e:
                 logger.warning(f"Text optimization failed: {e}")
 
-            # Write output
-            with open(output_path, 'w', encoding='utf-8') as f:
+            # Step 4: AI enrichment
+            if self._ai_options.summary_enabled and self._ai_options.api_key:
+                try:
+                    client = self._get_llm_client()
+                    if client:
+                        result = client.summarize(markdown_content[:8000])
+                        summary = result.get("summary", "")
+                        keywords = result.get("keywords", [])
+                        if summary:
+                            frontmatter = f"---\nsource_file: {source.name}\nconverted_at: {datetime.now(timezone.utc).isoformat()}\nai_summary: |-\n  {summary}\nai_keywords:\n"
+                            for kw in keywords:
+                                frontmatter += f"  - {kw}\n"
+                            frontmatter += "---\n\n"
+                            markdown_content = frontmatter + markdown_content
+                except Exception as e:
+                    logger.warning(f"AI summary failed: {e}")
+
+            # Step 5: RAG Chunking
+            if self._ai_options.chunk_enabled:
+                try:
+                    pipeline = self._get_rag_pipeline()
+                    chunks = pipeline.chunk(markdown_content, source.name)
+                    jsonl_path = output_path.with_suffix(".jsonl")
+                    pipeline.save_jsonl(chunks, str(jsonl_path))
+                    logger.info(f"Created RAG chunks: {jsonl_path}")
+                except Exception as e:
+                    logger.warning(f"RAG chunking failed: {e}")
+
+            # Step 6: Add standard frontmatter if not added by AI
+            if not self._ai_options.summary_enabled and not markdown_content.startswith("---"):
+                frontmatter = f"---\nsource_file: {source.name}\nconverted_at: {datetime.now(timezone.utc).isoformat()}\n---\n\n"
+                markdown_content = frontmatter + markdown_content
+
+            # Step 7: Write output
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
 
             logger.info(f"Converted: {source_path} -> {output_path}")
@@ -334,44 +290,51 @@ class MarkdownConverter:
                 output_path=str(output_path),
                 success=True,
                 images_extracted=images_extracted,
-                images_described=images_described
             )
 
         except PermissionError:
-            return ConversionResult(
-                source_path=source_path,
-                output_path=None,
-                success=False,
-                error_message="Không có quyền truy cập"
-            )
+            return ConversionResult(source_path, None, False, "Không có quyền truy cập")
         except Exception as e:
             logger.error(f"Conversion failed for {source_path}: {e}")
-            return ConversionResult(
-                source_path=source_path,
-                output_path=None,
-                success=False,
-                error_message=str(e)
-            )
+            return ConversionResult(source_path, None, False, str(e))
+
+    def _extract_images(self, source: "Path", images_dir: "Path", start_count: int = 0) -> int:
+        """
+        Extract images from PDF using PyMuPDF. 
+        DOCX and PPTX are handled inline via markitdown base64 extraction.
+        Returns number of extracted images.
+        """
+        count = 0
+        suffix = source.suffix.lower()
+
+        if suffix == ".pdf":
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(str(source))
+                for page_num in range(len(doc)):
+                    images = doc.get_page_images(page_num)
+                    for img_idx, img in enumerate(images):
+                        xref = img[0]
+                        image_data = doc.extract_image(xref)
+                        img_bytes = image_data["image"]
+                        ext = image_data.get("ext", "png")
+                        out_path = images_dir / f"page{page_num + 1}_img{start_count + count + 1}.{ext}"
+                        out_path.write_bytes(img_bytes)
+                        count += 1
+                doc.close()
+            except Exception as e:
+                logger.warning(f"PyMuPDF failed or not installed, skipping PDF image extraction: {e}")
+
+        return count
 
     def scan_folder(
         self,
         folder_path: str,
         recursive: bool = False,
         max_depth: Optional[int] = None,
-        allowed_extensions: Optional[Set[str]] = None
+        allowed_extensions: Optional[Set[str]] = None,
     ) -> List[str]:
-        """
-        Scan folder for convertible files.
-
-        Args:
-            folder_path: Path to folder
-            recursive: Whether to scan subfolders
-            max_depth: Maximum depth for recursive scan (None = unlimited)
-            allowed_extensions: Set of allowed extensions (None = all supported)
-
-        Returns:
-            List of file paths
-        """
+        """Scan folder for convertible files."""
         folder = Path(folder_path)
         if not folder.exists() or not folder.is_dir():
             return []
@@ -384,12 +347,10 @@ class MarkdownConverter:
         def scan_dir(dir_path: Path, current_depth: int = 0):
             if self._stop_requested:
                 return
-
             try:
                 for item in dir_path.iterdir():
                     if self._stop_requested:
                         return
-
                     if item.is_file():
                         if item.suffix.lower() in allowed_extensions:
                             files.append(str(item))
@@ -410,37 +371,21 @@ class MarkdownConverter:
         allowed_formats: Optional[List[str]] = None,
         output_dir: Optional[str] = None,
         overwrite: bool = False,
-        progress_callback: Optional[Callable[[int, int, ConversionResult], None]] = None
+        progress_callback: Optional[Callable[[int, int, ConversionResult], None]] = None,
     ) -> List[ConversionResult]:
-        """
-        Convert all matching files in a folder.
-
-        Args:
-            folder_path: Path to folder
-            recursive: Whether to include subfolders
-            max_depth: Maximum depth for recursive conversion
-            allowed_formats: List of format category names to include
-            output_dir: Optional output directory
-            overwrite: If True, overwrite existing .md files. If False, skip.
-            progress_callback: Optional callback(current, total, result) for progress updates
-
-        Returns:
-            List of ConversionResult for each file
-        """
+        """Convert all matching files in a folder."""
         self.reset_stop()
 
-        # Get allowed extensions
         if allowed_formats:
             allowed_extensions = self.get_extensions_for_formats(allowed_formats)
         else:
             allowed_extensions = self.get_all_extensions()
 
-        # Scan for files
         files = self.scan_folder(
             folder_path,
             recursive=recursive,
             max_depth=max_depth,
-            allowed_extensions=allowed_extensions
+            allowed_extensions=allowed_extensions,
         )
 
         if not files:
@@ -452,10 +397,8 @@ class MarkdownConverter:
         for i, file_path in enumerate(files):
             if self._stop_requested:
                 break
-
             result = self.convert_file(file_path, output_dir, overwrite=overwrite)
             results.append(result)
-
             if progress_callback:
                 progress_callback(i + 1, total, result)
 

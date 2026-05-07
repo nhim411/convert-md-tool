@@ -69,7 +69,7 @@ echo "✅ LITE Build complete!"
 echo "📁 Application: dist/MarkdownConverter-Lite.app"
 echo ""
 echo "ℹ️  Note: This version does NOT include AI image description."
-echo "   To use AI features, install openai/google-generativeai separately."
+echo "   To use AI features, install openai separately."
 echo ""
 
 # Show size

@@ -6,6 +6,18 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## 🤖 Tính năng AI (tùy chọn)
+
+- **markitdown-ocr**: Trích xuất text từ ảnh trong tài liệu bằng LLM Vision
+- **OpenAI-Compatible**: Hỗ trợ Azure OpenAI, Ollama, LM Studio, vLLM, Groq...
+- **RAG Pipeline**: Smart chunking theo header, metadata phong phú, JSONL export
+- **AI Summarization**: Tự động tạo tóm tắt và keywords cho document
+- **Excel Cleaning**: Forward-fill data cleaning cho Excel files
+
+### Yêu cầu AI
+
+Cần có API key từ OpenAI-compatible provider để sử dụng tính năng AI. Không bắt buộc - ứng dụng vẫn hoạt động normal nếu không có API key.
+
 ## ✨ Tính năng
 
 - 📄 Hỗ trợ nhiều định dạng: PDF, Word, PowerPoint, Excel, hình ảnh, âm thanh, HTML, CSV/JSON/XML, ZIP, EPub
@@ -111,8 +123,10 @@ File ứng dụng sẽ nằm trong thư mục `dist/`.
 ## 🛠️ Công nghệ
 
 - [markitdown](https://github.com/microsoft/markitdown) - Microsoft's conversion library
+- [markitdown-ocr](https://github.com/microsoft/markitdown/tree/main/packages/markitdown-ocr) - LLM Vision OCR plugin
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern GUI framework
 - [PyInstaller](https://pyinstaller.org/) - Application packaging
+- [OpenAI SDK](https://github.com/openai/openai-python) - OpenAI-compatible API client
 
 ## 📄 License
 

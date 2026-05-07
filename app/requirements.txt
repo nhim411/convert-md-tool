@@ -16,5 +16,7 @@ PyMuPDF>=1.23.0
 
 # AI Vision (optional - adds ~50MB to build)
 openai>=1.0.0
-google-generativeai>=0.3.0
 chardet>=5.0.0
+
+# OCR Plugin (LLM Vision OCR for embedded images)
+markitdown-ocr>=0.1.0

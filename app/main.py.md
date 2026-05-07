@@ -1,3 +1,8 @@
+---
+source_file: main.py
+converted_at: 2026-05-06T10:18:19.871069+00:00
+---
+
 """
 Markdown Converter - Main Application
 Cross-platform desktop application for converting files to Markdown.
@@ -6,12 +11,6 @@ Cross-platform desktop application for converting files to Markdown.
 import os
 import sys
 import threading
-import warnings
-from pathlib import Path
-
-# Suppress harmless pydub ffmpeg warnings that confuse users
-warnings.filterwarnings("ignore", message=".*ffmpeg.*")
-warnings.filterwarnings("ignore", message=".*ffprobe.*")
 
 # Add app directory to path for imports BEFORE importing local modules
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,11 +29,12 @@ from components import (
     OutputOptions,
     FormatFilter,
     ProgressPanel,
+    FormatFilter,
+    ProgressPanel,
     AIOptions,
     FilePreview,
     CollapsibleFrame,
 )
-
 
 class MarkdownConverterApp(ctk.CTk):
     """Main application window."""
@@ -153,7 +153,7 @@ class MarkdownConverterApp(ctk.CTk):
         # --- Tab 2: Formats ---
         format_note = ctk.CTkLabel(
             tab_formats,
-            text="ℹ️ Chọn các định dạng tệp sẽ được chuyển đổi sang Markdown",
+            text="i️ Chọn các định dạng tệp sẽ được chuyển đổi sang Markdown",
             font=ctk.CTkFont(size=11),
             text_color="gray"
         )
@@ -179,7 +179,6 @@ class MarkdownConverterApp(ctk.CTk):
             fg_color=("blue", "#1f538d"),
         )
         self._convert_btn.pack(fill="x", side="bottom", pady=(10, 0))
-
 
         # --- RIGHT COLUMN (Progress & Logs) ---
         right_col = ctk.CTkFrame(content_frame, fg_color=("gray90", "gray13"), corner_radius=10)
@@ -353,28 +352,13 @@ class MarkdownConverterApp(ctk.CTk):
             # Stop conversion
             self._converter.request_stop()
             self._convert_btn.configure(
-                text="⏳ Đang huỷ...",
+                text=f"🚀 {LABELS['start_convert']}",
                 state="disabled"
             )
             return
 
         if not self._validate_inputs():
             return
-
-        # Gather all required data from UI thread before starting background thread
-        source_path = self._file_selector.selected_path
-        output_dir = self._output_options.output_path
-        overwrite = self._output_options.overwrite_existing
-
-        if self._file_selector.is_folder_mode():
-            # Folder mode: use files selected in preview
-            files_to_convert = self._file_preview.get_selected_files()
-        else:
-            # File mode: use selected files from preview, fallback to source_path
-            if self._file_preview.has_files():
-                files_to_convert = self._file_preview.get_selected_files()
-            else:
-                files_to_convert = [source_path] if source_path else []
 
         # Update UI state
         self._is_converting = True
@@ -386,7 +370,6 @@ class MarkdownConverterApp(ctk.CTk):
         ai_cfg = self._ai_options.get_config()
         ai_opts = ConverterAIOptions(
             extract_images=ai_cfg.get("extract_images", False),
-            ocr_enabled=ai_cfg.get("ocr_enabled", False),
             chunk_enabled=ai_cfg.get("chunk_enabled", False),
             excel_clean_enabled=ai_cfg.get("excel_clean_enabled", False),
             summary_enabled=ai_cfg.get("summary_enabled", False),
@@ -399,21 +382,34 @@ class MarkdownConverterApp(ctk.CTk):
         # Start conversion in background thread
         self._conversion_thread = threading.Thread(
             target=self._run_conversion,
-            args=(files_to_convert, output_dir, overwrite),
             daemon=True
         )
         self._conversion_thread.start()
 
-    def _run_conversion(self, files_to_convert, output_dir, overwrite):
+    def _run_conversion(self):
         """Run conversion in background thread."""
         try:
+            source_path = self._file_selector.selected_path
+            output_dir = self._output_options.output_path
+
+            if self._file_selector.is_folder_mode():
+                # Folder conversion - Use files from preview!
+                # We already scanned, so we trust the preview list.
+                files_to_convert = self._file_preview.get_selected_files()
+
+                # Check directly, if list empty logic below handles it
+            else:
+                # File mode - convert selected files
+                files_to_convert = self._file_preview.get_selected_files() if self._file_preview.has_files() else [source_path]
+
             if not files_to_convert:
-                self.after(0, lambda: self._progress_panel.log_message(
+                 self.after(0, lambda: self._progress_panel.log_message(
                     LABELS['error_empty_folder'], "info"
                 ))
-                return
+                 return
 
             total = len(files_to_convert)
+            overwrite = self._output_options.overwrite_existing
 
             self.after(0, lambda: self._progress_panel.set_progress(0, total))
 
@@ -421,12 +417,6 @@ class MarkdownConverterApp(ctk.CTk):
             for i, file_path in enumerate(files_to_convert):
                 if self._converter._stop_requested:
                     break
-                
-                # Update UI to show which file is currently being processed
-                current_filename = Path(file_path).name
-                self.after(0, lambda n=current_filename: self._progress_panel.set_status(
-                    f"⏳ Đang xử lý: {n}..."
-                ))
 
                 result = self._converter.convert_file(file_path, output_dir, overwrite=overwrite)
                 if result.success:
@@ -446,20 +436,23 @@ class MarkdownConverterApp(ctk.CTk):
             self.after(0, self._conversion_complete)
 
     def _on_progress(self, current: int, total: int, result: ConversionResult):
-        """Callback for progress updates from converter. Must be called on main thread."""
-        self._progress_panel.set_progress(current, total)
-        self._progress_panel.set_status(
-            LABELS['converting'].format(current=current, total=total)
-        )
-        self._progress_panel.log_conversion_result(
-            source=result.source_path,
-            output=result.output_path,
-            success=result.success,
-            error=result.error_message,
-            skipped=result.skipped,
-            images_extracted=result.images_extracted,
-            images_described=result.images_described
-        )
+        """Callback for progress updates from converter."""
+        def update():
+            self._progress_panel.set_progress(current, total)
+            self._progress_panel.set_status(
+                LABELS['converting'].format(current=current, total=total)
+            )
+            self._progress_panel.log_conversion_result(
+                source=result.source_path,
+                output=result.output_path,
+                success=result.success,
+                error=result.error_message,
+                skipped=result.skipped,
+                images_extracted=result.images_extracted,
+                images_described=result.images_described
+            )
+
+        self.after(0, update)
 
     def _conversion_complete(self):
         """Reset UI after conversion completes."""
@@ -479,12 +472,10 @@ class MarkdownConverterApp(ctk.CTk):
             self._converter.request_stop()
         self.destroy()
 
-
 def main():
     """Application entry point."""
     app = MarkdownConverterApp()
     app.mainloop()
-
 
 if __name__ == "__main__":
     main()

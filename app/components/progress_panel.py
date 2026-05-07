@@ -62,7 +62,6 @@ class ProgressPanel(ctk.CTkFrame):
 
         # Progress bar frame
         progress_frame = ctk.CTkFrame(self, fg_color="transparent")
-        progress_frame = ctk.CTkFrame(self, fg_color="transparent")
         progress_frame.pack(fill="x", padx=10, pady=2)
 
         # Progress bar
