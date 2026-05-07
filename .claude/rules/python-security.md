@@ -1,0 +1,30 @@
+---
+paths:
+  - "**/*.py"
+  - "**/*.pyi"
+---
+# Python Security
+
+> This file extends [common/security.md](security.md) with Python specific content.
+
+## Secret Management
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+api_key = os.environ["OPENAI_API_KEY"]  # Raises KeyError if missing
+```
+
+## Security Scanning
+
+- Use **bandit** for static security analysis:
+  ```bash
+  bandit -r src/
+  ```
+
+## Reference
+
+Use **bandit** and **pip-audit** regularly for dependency and code security scanning.
