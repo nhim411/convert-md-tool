@@ -28,6 +28,7 @@ Cần có API key từ OpenAI-compatible provider để sử dụng tính năng 
 - ⚠️ **Mới:** Tùy chọn giữ nguyên hoặc ghi đè file cũ
 - 🌙 Dark/Light theme
 - 🇻🇳 Giao diện tiếng Việt
+- 💻 **Mới:** Giao diện dòng lệnh (CLI) cho tự động hóa & xử lý hàng loạt
 
 ## � Yêu cầu Hệ thống
 
@@ -79,6 +80,78 @@ pip install -r app/requirements.txt
 # Chạy ứng dụng
 python app/main.py
 ```
+
+## 💻 Sử dụng Command Line (CLI)
+
+Ngoài giao diện đồ họa, ứng dụng còn có CLI để chuyển đổi không cần mở GUI — phù hợp cho tự động hóa, script và xử lý hàng loạt.
+
+Có hai cách gọi CLI tương đương nhau:
+
+```bash
+python app/cli.py <input> [tùy chọn]
+# hoặc (main.py tự nhận diện: có tham số -> CLI, không tham số -> mở GUI)
+python app/main.py <input> [tùy chọn]
+```
+
+### Ví dụ nhanh
+
+```bash
+# Chuyển đổi một file (xuất .md cùng thư mục với file gốc)
+python app/cli.py document.pdf
+
+# Chuyển đổi cả thư mục, quét thư mục con, xuất ra ./out
+python app/cli.py ./docs --recursive -o ./out
+
+# Chỉ chuyển đổi PDF và Word trong thư mục
+python app/cli.py ./docs --formats pdf,word
+
+# Ghi đè file .md đã tồn tại
+python app/cli.py report.xlsx --overwrite
+
+# Xuất kết quả dạng JSON (dùng cho script)
+python app/cli.py document.pdf --json
+
+# Bật tính năng AI (OCR + tóm tắt). Nên đặt API key qua biến môi trường
+export MD_API_KEY="sk-..."        # Windows: set MD_API_KEY=sk-...
+python app/cli.py scan.pdf --ocr --summary --extract-images
+```
+
+### Các tùy chọn
+
+| Tùy chọn | Mô tả |
+|----------|-------|
+| `input` | Đường dẫn tới file hoặc thư mục cần chuyển đổi (bắt buộc) |
+| `-o`, `--output DIR` | Thư mục xuất (mặc định: cùng vị trí với file gốc) |
+| `-r`, `--recursive` | Quét cả thư mục con (chỉ áp dụng cho thư mục) |
+| `--max-depth N` | Giới hạn độ sâu khi quét đệ quy |
+| `-f`, `--formats` | Lọc định dạng, phân tách bằng dấu phẩy: `pdf,word,powerpoint,excel,images,text` |
+| `--overwrite` | Ghi đè file `.md` đã tồn tại (mặc định: bỏ qua) |
+| `--json` | In kết quả dưới dạng JSON |
+| `-q`, `--quiet` | Chỉ in lỗi và dòng tóm tắt cuối |
+| `-h`, `--help` | Hiển thị toàn bộ trợ giúp |
+
+**Tùy chọn AI** (cần API key):
+
+| Tùy chọn | Mô tả |
+|----------|-------|
+| `--extract-images` | Trích xuất hình ảnh từ PDF/DOCX/PPTX |
+| `--ocr` | Bật OCR mô tả ảnh bằng LLM Vision |
+| `--chunk` | Tạo file `.jsonl` phân mảnh cho RAG |
+| `--excel-clean` | Làm sạch file Excel (gỡ merge cell) trước khi chuyển đổi |
+| `--summary` | Sinh tóm tắt + từ khóa bằng AI |
+| `--api-key KEY` | API key (hoặc đặt biến môi trường `MD_API_KEY` — an toàn hơn) |
+| `--base-url URL` | Base URL tương thích OpenAI (mặc định `https://api.openai.com/v1`) |
+| `--model NAME` | Tên model (mặc định `gpt-4o-mini`) |
+
+### Mã thoát (exit code)
+
+| Mã | Ý nghĩa |
+|----|---------|
+| `0` | Tất cả file chuyển đổi thành công (hoặc được bỏ qua) |
+| `1` | Có ít nhất một file lỗi |
+| `2` | Lỗi tham số (không tìm thấy đường dẫn, định dạng không hợp lệ) |
+
+> **Lưu ý khi dùng bản đóng gói:** file `.exe`/`.app` hiện được build ở chế độ windowed (không có console) nên sẽ không hiển thị output CLI. Để dùng CLI, hãy chạy `python app/cli.py ...` từ mã nguồn.
 
 ## hammer_and_wrench: Đóng gói (Build EXE/App)
 

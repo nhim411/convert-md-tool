@@ -481,10 +481,18 @@ class MarkdownConverterApp(ctk.CTk):
 
 
 def main():
-    """Application entry point."""
+    """Application entry point (GUI)."""
     app = MarkdownConverterApp()
     app.mainloop()
 
 
-if __name__ == "__main__":
+def _run():
+    """Dispatch to the CLI when args are given, otherwise launch the GUI."""
+    if len(sys.argv) > 1:
+        from cli import run_cli
+        sys.exit(run_cli())
     main()
+
+
+if __name__ == "__main__":
+    _run()
