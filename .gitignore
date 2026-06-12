@@ -30,8 +30,15 @@ wheels/
 
 # Virtual environments
 venv/
+venv-lite/
 ENV/
 env/
+
+# Testing / coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
 
 # IDE
 .idea/
